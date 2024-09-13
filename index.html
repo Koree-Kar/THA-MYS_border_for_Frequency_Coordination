@@ -190,9 +190,9 @@
           // Determine frequency registration alert
           var frequencyAlert = '';
           if (minDistance <= 30) {
-            frequencyAlert = "UHF Frequency Registration";
-          } else if (minDistance <= 60) {
             frequencyAlert = "UHF and VHF Frequency Registration";
+          } else if (minDistance <= 60) {
+            frequencyAlert = "VHF Frequency Registration";
           } else {
             frequencyAlert = "No Frequency Registration";
           }
