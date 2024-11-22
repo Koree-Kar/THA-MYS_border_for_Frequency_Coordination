@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Thailand - Malaysia Border Frequency Registration</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      /* Reset margins and paddings */
+      html, body, #map {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: Arial, sans-serif;
+      }
+
+      /* Style for the map */
+      #map {
+        width: 100%;
+      }
+
+      /* Style for the search container */
+      .search-container {
+        position: absolute;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 5;
+        display: flex;
+        align-items: center;
+      }
+
+      #location-input {
+        width: 400px;
+        padding: 15px;
+        font-size: 18px;
+        border: 2px solid #ccc;
+        border-radius: 8px 0 0 8px;
+        outline: none;
+      }
+
+      #location-input:focus {
+        border-color: #4d90fe;
+      }
+
+      #clear-btn {
+        background-color: #f25f5c;
+        color: white;
+        border: none;
+        padding: 15px;
+        font-size: 18px;
+        cursor: pointer;
+        border-radius: 0 8px 8px 0;
+        outline: none;
+      }
+
+      #clear-btn:hover {
+        background-color: #d9534f;
+      }
+
+      .go-btn {
+        position: absolute;
+        top: 90px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 15px 30px;
+        font-size: 18px;
+        background-color: #d9534f;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        outline: none;
+        z-index: 5;
+      }
+
+      .go-btn:hover {
+        background-color: #c9302c;
+      }
+
+      /* Adjust the "My Location" button size */
+      .custom-map-control-button {
+        background-color: #fff;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        box-shadow: 0 2px 6px rgba(0,0,0,.3);
+        cursor: pointer;
+        margin-top: 20px;
+        margin-right: 10px;
+        text-align: center;
+        width: 60px;
+        height: 60px;
+      }
+
+      .custom-map-control-button div {
+        color: rgb(25,25,25);
+        font-family: Roboto,Arial,sans-serif;
+        font-size: 30px;
+        line-height: 56px;
+      }
+
+      /* Modal Background */
+      .modal {
+        display: none; /* Hidden by default */
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.4); /* Black background with opacity */
+      }
+
+      /* Modal Content */
+      .modal-content {
+        background-color: #fff;
+        margin: 15% auto; /* Center the modal */
+        padding: 20px;
+        border: 1px solid #888;
+        width: 60%; /* Width of the modal */
+        max-width: 600px;
+        border-radius: 8px;
+      }
+
+      /* Close Button */
+      .close {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+      }
+
+      .close:hover,
+      .close:focus {
+        color: black;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      /* Country Details Indentation */
+      .country-details {
+        padding-left: 20px;
+      }
+
+      .country-details p {
+        margin: 0;
+        padding: 5px 0;
+      }
+
+    </style>
+    <!-- Include the Google Maps JavaScript API with Places library -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBivO_Cvi7SOtiuVdwkYKIlP-gYilolWHo&libraries=places"></script>
+    <script>
+      function initMap() {
+        var map = new google.maps.Map(document.getElementById("map"), {
+          zoom: 9,
+          center: { lat: 6.556, lng: 101.26 }, // Centered around Pattani, Yala, etc.
+        });
+
+        // Create the autocomplete object and associate it with the UI input control.
+        var input = document.getElementById('location-input');
+        var autocomplete = new google.maps.places.Autocomplete(input);
+        autocomplete.bindTo('bounds', map);
+
+        var geocoder = new google.maps.Geocoder();
+
+        // List of border points between Thailand and mainland Malaysia
+        var borderPoints = [
+          { lat: 6.425808759430897,  lng: 100.119346149772 }, // 1 Borderline coordinates near Malaysia
+          { lat: 6.4275145858655,  lng: 100.12913084756 }, // 2
+          { lat: 6.436896528947844,  lng: 100.134280688502 }, // 3
+          { lat: 6.445425417721031,  lng: 100.136512286243 }, // 4
+          { lat: 6.451395554536172,  lng: 100.145095354479 }, // 5
+          { lat: 6.463676757582056,  lng: 100.145438677208 }, // 6
+          { lat: 6.4687938381867305,  lng: 100.145782000134 }, // 7
+          { lat: 6.475787096975468,  lng: 100.151446825169 }, // 8
+          { lat: 6.48721489769379,  lng: 100.155223375572 }, // 9
+          { lat: 6.506658617695939,  lng: 100.157111650584 }, // 10
+          { lat: 6.5197912309741595,  lng: 100.154880052843 }, // 11
+          { lat: 6.556799470876847,  lng: 100.153335101748 }, // 12
+          { lat: 6.578457397158182,  lng: 100.157283313136 }, // 13
+          { lat: 6.574364632949569,  lng: 100.170672899584 }, // 14
+          { lat: 6.574194100376185,  lng: 100.18183088829 }, // 15
+          { lat: 6.5949986421211815,  lng: 100.177539354172 }, // 16
+          { lat: 6.609152054033809,  lng: 100.169299609168 }, // 17
+          { lat: 6.624498667880461,  lng: 100.166896350062 }, // 18
+          { lat: 6.647176678489268,  lng: 100.16826964098 }, // 19
+          { lat: 6.668319145371742,  lng: 100.177711016039 }, // 20
+          { lat: 6.694745945858643,  lng: 100.170157915832 }, // 21
+          { lat: 6.705145778312369,  lng: 100.182002549998 }, // 22
+          { lat: 6.717250221837232,  lng: 100.185950761386 }, // 23
+          { lat: 6.7167387725673215,  lng: 100.185435777292 }, // 24
+          { lat: 6.716738772872324,  lng: 100.18680906958 }, // 25
+          { lat: 6.72662669675566,  lng: 100.203460221958 }, // 26
+          { lat: 6.719636978291496,  lng: 100.214274887935 }, // 27
+          { lat: 6.697814772243382,  lng: 100.222857956171 }, // 28
+          { lat: 6.710089882999698,  lng: 100.257190240005 }, // 29
+          { lat: 6.703952366036101,  lng: 100.270236503724 }, // 30
+          { lat: 6.706850647569955,  lng: 100.27555800603 }, // 31
+          { lat: 6.708555511007559,  lng: 100.291007528854 }, // 32
+          { lat: 6.686903302540528,  lng: 100.291694174313 }, // 33
+          { lat: 6.678208051034741,  lng: 100.294784078878 }, // 34
+          { lat: 6.680424501482358,  lng: 100.300620567457 }, // 35
+          { lat: 6.668148644862242,  lng: 100.306628715222 }, // 36
+          { lat: 6.666955142391996,  lng: 100.311778556163 }, // 37
+          { lat: 6.667466643806527,  lng: 100.316070090281 }, // 38
+          { lat: 6.665250133822146,  lng: 100.317615042563 }, // 39
+          { lat: 6.665761637015714,  lng: 100.322078238046 }, // 40
+          { lat: 6.664568128733971,  lng: 100.326713094893 }, // 41
+          { lat: 6.662181103456017,  lng: 100.325683126705 }, // 42
+          { lat: 6.658941550571576,  lng: 100.32551146534 }, // 43
+          { lat: 6.655872480744701,  lng: 100.323108206234 }, // 44
+          { lat: 6.654167433662124,  lng: 100.319846640305 }, // 45
+          { lat: 6.649734282838926,  lng: 100.321391592918 }, // 46
+          { lat: 6.649222762944291,  lng: 100.322421561106 }, // 47
+          { lat: 6.6330243578111485,  lng: 100.321734915647 }, // 48
+          { lat: 6.621940931581089,  lng: 100.324996481577 }, // 49
+          { lat: 6.614438163296268,  lng: 100.315726767882 }, // 50
+          { lat: 6.6038658873699205,  lng: 100.315726767882 }, // 51
+          { lat: 6.5851080671709274,  lng: 100.334437858411 }, // 52
+          { lat: 6.571977171315722,  lng: 100.351775657103 }, // 53
+          { lat: 6.5566289314785395,  lng: 100.36053038745 }, // 54
+          { lat: 6.545543798013278,  lng: 100.373233328439 }, // 55
+          { lat: 6.53889259978658,  lng: 100.387137898981 }, // 56
+          { lat: 6.535993331596332,  lng: 100.401557454964 }, // 57
+          { lat: 6.535822785746525,  lng: 100.402415762937 }, // 58
+          { lat: 6.523202242935439,  lng: 100.416148675566 }, // 59
+          { lat: 6.517915164237662,  lng: 100.422671807425 }, // 60
+          { lat: 6.523713892752808,  lng: 100.430568230202 }, // 61
+          { lat: 6.527124878180819,  lng: 100.444301139379 }, // 62
+          { lat: 6.5313885774115406,  lng: 100.456489097828 }, // 63
+          { lat: 6.524737190929581,  lng: 100.489448081432 }, // 64
+          { lat: 6.5225200423233405,  lng: 100.495971213597 }, // 65
+          { lat: 6.506488061465232,  lng: 100.499747764172 }, // 66
+          { lat: 6.500689133615591,  lng: 100.507815848999 }, // 67
+          { lat: 6.493355100091267,  lng: 100.512622367211 }, // 68
+          { lat: 6.491990616935559,  lng: 100.541633139708 }, // 69
+          { lat: 6.496084055306883,  lng: 100.562575830572 }, // 70
+          { lat: 6.478686712868789,  lng: 100.592444908131 }, // 71
+          { lat: 6.471352358817387,  lng: 100.607894431701 }, // 72
+          { lat: 6.458218482724597,  lng: 100.64514495099 }, // 73
+          { lat: 6.464359039077697,  lng: 100.686172018601 }, // 74
+          { lat: 6.471011223712704,  lng: 100.699389944565 }, // 75
+          { lat: 6.470946678897722,  lng: 100.709587328356 }, // 76
+          { lat: 6.481595686104498,  lng: 100.712037019352 }, // 77
+          { lat: 6.49467844445369,  lng: 100.722550277174 }, // 78
+          { lat: 6.510499000009303,  lng: 100.734696662595 }, // 79
+          { lat: 6.50725379834844,  lng: 100.741025031255 }, // 80
+          { lat: 6.5003576753074706,  lng: 100.74337265204 }, // 81
+          { lat: 6.484333965685584,  lng: 100.742760229407 }, // 82
+          { lat: 6.468918270734694,  lng: 100.745005779676 }, // 83
+          { lat: 6.46323868555361,  lng: 100.776341411432 }, // 84
+          { lat: 6.444373891625779,  lng: 100.810432945937 }, // 85
+          { lat: 6.407352231477178,  lng: 100.823497966625 }, // 86
+          { lat: 6.3844278828019165,  lng: 100.824008319476 }, // 87
+          { lat: 6.360183761141693,  lng: 100.82247726256 }, // 88
+          { lat: 6.336648624100363,  lng: 100.836358846825 }, // 89
+          { lat: 6.315141439381631,  lng: 100.848607301999 }, // 90
+          { lat: 6.308749980707044,  lng: 100.849730077701 }, // 91
+          { lat: 6.282473158250379,  lng: 100.838094045836 }, // 92
+          { lat: 6.264311953053837,  lng: 100.871879370065 }, // 93
+          { lat: 6.248483795169152,  lng: 100.917198653853 }, // 94
+          { lat: 6.26380464750943,  lng: 100.946799088199 }, // 95
+          { lat: 6.282777530734496,  lng: 100.969662874681 }, // 96
+          { lat: 6.276588591467041,  lng: 100.985279655577 }, // 97
+          { lat: 6.278719217866523,  lng: 100.984565163331 }, // 98
+          { lat: 6.266239708543609,  lng: 100.992220448361 }, // 99
+          { lat: 6.250513072840744,  lng: 101.022229164002 }, // 100
+          { lat: 6.2545716046635205,  lng: 101.04886955488 }, // 101
+          { lat: 6.25451100252043,  lng: 101.048687592574 }, // 102
+          { lat: 6.2590768138497115,  lng: 101.063794021246 }, // 103
+          { lat: 6.260700203814511,  lng: 101.095027584014 }, // 104
+          { lat: 6.227318234346208,  lng: 101.112991985637 }, // 105
+          { lat: 6.220316882873022,  lng: 101.117891367978 }, // 106
+          { lat: 6.201849103355577,  lng: 101.122178327263 }, // 107
+          { lat: 6.193832667719247,  lng: 101.126975638978 }, // 108
+          { lat: 6.182162955403802,  lng: 101.112073350961 }, // 109
+          { lat: 6.176074307658765,  lng: 101.092986174662 }, // 110
+          { lat: 6.170898901991808,  lng: 101.075327984537 }, // 111
+          { lat: 6.1607509013294015,  lng: 101.076348689119 }, // 112
+          { lat: 6.150602706486078,  lng: 101.061446402164 }, // 113
+          { lat: 6.1395409533912915,  lng: 101.071755518357 }, // 114
+          { lat: 6.13375627515306,  lng: 101.089617848627 }, // 115
+          { lat: 6.123912029798119,  lng: 101.104418066338 }, // 116
+          { lat: 6.11447356243147,  lng: 101.118912072319 }, // 117
+          { lat: 6.106151334604262,  lng: 101.126261145604 }, // 118
+          { lat: 6.094987167494131,  lng: 101.127690132083 }, // 119
+          { lat: 6.092348330305311,  lng: 101.115237536219 }, // 120
+          { lat: 6.084025759196026,  lng: 101.116462381709 }, // 121
+          { lat: 6.066771237851991,  lng: 101.111460929049 }, // 122
+          { lat: 6.050226678249147,  lng: 101.099722826566 }, // 123
+          { lat: 6.039365863685617,  lng: 101.113808549827 }, // 124
+          { lat: 6.008913821860187,  lng: 101.112787845325 }, // 125
+          { lat: 5.988713026747597,  lng: 101.11360440899 }, // 126
+          { lat: 5.9816070414220714,  lng: 101.123301102347 }, // 127
+          { lat: 5.977343405959066,  lng: 101.124832159306 }, // 128
+          { lat: 5.957547521234498,  lng: 101.112277492889 }, // 129
+          { lat: 5.950542652296173,  lng: 101.095742076697 }, // 130
+          { lat: 5.941405732730649,  lng: 101.099416612696 }, // 131
+          { lat: 5.935212845619249,  lng: 101.09400687904 }, // 132
+          { lat: 5.9111512962114166,  lng: 101.086657803761 }, // 133
+          { lat: 5.909120737698789,  lng: 101.08441225382 }, // 134
+          { lat: 5.919374981427441,  lng: 101.068080979542 }, // 135
+          { lat: 5.909831433864509,  lng: 101.05174970498 }, // 136
+          { lat: 5.91318184692012,  lng: 101.026027949527 }, // 137
+          { lat: 5.9007953701836175,  lng: 101.029396274362 }, // 138
+          { lat: 5.893180595178642,  lng: 101.023374116313 }, // 139
+          { lat: 5.876732325569574,  lng: 101.014187774585 }, // 140
+          { lat: 5.874701640883872,  lng: 101.00877804018 }, // 141
+          { lat: 5.837538812639803,  lng: 101.011329801735 }, // 142
+          { lat: 5.817534848005649,  lng: 100.999591698204 }, // 143
+          { lat: 5.809512753374819,  lng: 100.985505974726 }, // 144
+          { lat: 5.793569770718918,  lng: 100.989078441205 }, // 145
+          { lat: 5.779657373768598,  lng: 101.002653812582 }, // 146
+          { lat: 5.7658461888775046,  lng: 101.018780945696 }, // 147
+          { lat: 5.7418789237636165,  lng: 101.031743894572 }, // 148
+          { lat: 5.739441517839647,  lng: 101.04480891435 }, // 149
+          { lat: 5.745027223331201,  lng: 101.059404990781 }, // 150
+          { lat: 5.744316318477914,  lng: 101.058792568462 }, // 151
+          { lat: 5.7209575204778815,  lng: 101.08216670385 }, // 152
+          { lat: 5.701660401552294,  lng: 101.096150358748 }, // 153
+          { lat: 5.688253600311747,  lng: 101.102887009364 }, // 154
+          { lat: 5.680432821820311,  lng: 101.111971280663 }, // 155
+          { lat: 5.665197234418807,  lng: 101.119626565351 }, // 156
+          { lat: 5.648945498250066,  lng: 101.126873568207 }, // 157
+          { lat: 5.623144931285133,  lng: 101.146573167415 }, // 158
+          { lat: 5.622107483808936,  lng: 101.145290351761 }, // 159
+          { lat: 5.647390606539885,  lng: 101.17000958828 }, // 160
+          { lat: 5.688387917868411,  lng: 101.216014834024 }, // 161
+          { lat: 5.764225225651296,  lng: 101.24828717059 }, // 162
+          { lat: 5.800432266465815,  lng: 101.262706725226 }, // 163
+          { lat: 5.80103732928897,  lng: 101.263034143224 }, // 164
+          { lat: 5.812238813792752,  lng: 101.277180386994 }, // 165
+          { lat: 5.816259805161702,  lng: 101.288728341092 }, // 166
+          { lat: 5.813962099326521,  lng: 101.32741398732 }, // 167
+          { lat: 5.832917891538688,  lng: 101.358304764533 }, // 168
+          { lat: 5.877432760474544,  lng: 101.391216434968 }, // 169
+          { lat: 5.903805507690121,  lng: 101.514217591866 }, // 170
+          { lat: 5.9348725337898225,  lng: 101.58056338966 }, // 171
+          { lat: 5.910709441877738,  lng: 101.615267350683 }, // 172
+          { lat: 5.87456436146673,  lng: 101.657728662639 }, // 173
+          { lat: 5.866238475694394,  lng: 101.6630363277 }, // 174
+          { lat: 5.810187827770573,  lng: 101.668139850607 }, // 175
+          { lat: 5.782566611396273,  lng: 101.687329098703 }, // 176
+          { lat: 5.757990719756155,  lng: 101.693657467108 }, // 177
+          { lat: 5.758193830661017,  lng: 101.692024339778 }, // 178
+          { lat: 5.762865361428339,  lng: 101.709784599495 }, // 179
+          { lat: 5.787847242324102,  lng: 101.718358517979 }, // 180
+          { lat: 5.785410034109873,  lng: 101.727544861788 }, // 181
+          { lat: 5.796986679183075,  lng: 101.753266617241 }, // 182
+          { lat: 5.7845976290559,  lng: 101.775926263475 }, // 183
+          { lat: 5.7561627182747275,  lng: 101.787358154788 }, // 184
+          { lat: 5.744382123795608,  lng: 101.809405373747 }, // 185
+          { lat: 5.757381386535124,  lng: 101.818183433147 }, // 186
+          { lat: 5.789268942153223,  lng: 101.836556115613 }, // 187
+          { lat: 5.793977082621864,  lng: 101.856717637735 }, // 188
+          { lat: 5.8020038928918884,  lng: 101.861695817312 }, // 189
+          { lat: 5.8318899470942585,  lng: 101.879720261714 }, // 190
+          { lat: 5.838037738056217,  lng: 101.884097626515 }, // 191
+          { lat: 5.839318519352882,  lng: 101.887101700397 }, // 192
+          { lat: 5.846149303468739,  lng: 101.895513107268 }, // 193
+          { lat: 5.845295460186647,  lng: 101.916799119503 }, // 194
+          { lat: 5.85801759311111,  lng: 101.927442124746 }, // 195
+          { lat: 5.870397913858328,  lng: 101.940574219606 }, // 196
+          { lat: 5.879704318847086,  lng: 101.939458420882 }, // 197
+          { lat: 5.888156790049822,  lng: 101.937140992458 }, // 198
+          { lat: 5.900792567729206,  lng: 101.933536103799 }, // 199
+          { lat: 5.910781459177351,  lng: 101.921691467443 }, // 200
+          { lat: 5.916928379254483,  lng: 101.922206451537 }, // 201
+          { lat: 5.949283955392852,  lng: 101.929587890067 }, // 202
+          { lat: 5.972162212026484,  lng: 101.940917541692 }, // 203
+          { lat: 5.99034462261893,  lng: 101.94829898111 }, // 204
+          { lat: 5.995681736852643,  lng: 101.955147082341 }, // 205
+          { lat: 6.003620268179533,  lng: 101.968279176742 }, // 206
+          { lat: 6.011558684030011,  lng: 101.971454912436 }, // 207
+          { lat: 6.0178751900892875,  lng: 101.970939928342 }, // 208
+          { lat: 6.019660789314794,  lng: 101.971304136882 }, // 209
+          { lat: 6.022147721101691,  lng: 101.974672462394 }, // 210
+          { lat: 6.024507757884239,  lng: 101.976509730641 }, // 211
+          { lat: 6.030775762746482,  lng: 101.977862164211 }, // 212
+          { lat: 6.0404948336804285,  lng: 101.991309947743 }, // 213
+          { lat: 6.043029547945272,  lng: 102.001291023115 }, // 214
+          { lat: 6.050090943858702,  lng: 102.003111766841 }, // 215
+          { lat: 6.053591431066664,  lng: 102.01494660244 }, // 216
+          { lat: 6.061859732367983,  lng: 102.022411651716 }, // 217
+          { lat: 6.071334929505476,  lng: 102.031940211954 }, // 218
+          { lat: 6.075921589110691,  lng: 102.043714354714 }, // 219
+          { lat: 6.079240857871538,  lng: 102.048994511519 }, // 220
+          { lat: 6.091190056162388,  lng: 102.05828030639 }, // 221
+          { lat: 6.097405947926941,  lng: 102.059372752626 }, // 222
+          { lat: 6.102897598193502,  lng: 102.061193496352 }, // 223
+          { lat: 6.10989786228527,  lng: 102.067384025781 }, // 224
+          { lat: 6.128484325493957,  lng: 102.077640882809 }, // 225
+          { lat: 6.137113534708145,  lng: 102.083224496901 }, // 226
+          { lat: 6.151294099669018,  lng: 102.090021940409 }, // 227
+          { lat: 6.158112704669829,  lng: 102.084620400689 }, // 228
+          { lat: 6.17199101122355,  lng: 102.078126413465 }, // 229
+          { lat: 6.19111834185962,  lng: 102.077276733004 }, // 230
+          { lat: 6.198720810796412,  lng: 102.077701573206 }, // 231
+          { lat: 6.209701961357813,  lng: 102.079036785272 }, // 232
+          { lat: 6.218028176080656,  lng: 102.079765082979 }, // 233
+          { lat: 6.22575092366731,  lng: 102.080432689011 }, // 234
+          { lat: 6.2316635755449745,  lng: 102.087048057882 }, // 235
+          { lat: 6.237636492956826,  lng: 102.092024757399 }, // 236
+          { lat: 6.241558068392862,  lng: 102.090204013674 }, // 237
+          { lat: 6.245419283217743,  lng: 102.090386088046 }, // 238
+
+        ];
+
+        // Create the "My Location" button
+        var locationButtonDiv = document.createElement('div');
+        createLocationButton(locationButtonDiv, map, borderPoints);
+        map.controls[google.maps.ControlPosition.RIGHT_TOP].push(locationButtonDiv);
+
+        // Event listener for place changed in autocomplete
+        autocomplete.addListener('place_changed', function() {
+          var place = autocomplete.getPlace();
+          if (!place.geometry) {
+            alert("No details available for input: '" + place.name + "'");
+            return;
+          }
+
+          handlePlaceSelection(place.geometry.location, map, borderPoints);
+        });
+
+        // Event listener for the "Go" button
+        document.querySelector('.go-btn').addEventListener('click', function() {
+          var address = document.getElementById('location-input').value;
+          geocodeAddress(geocoder, map, address, borderPoints);
+        });
+
+        // Event listener for the "Clear" button
+        document.getElementById('clear-btn').addEventListener('click', function() {
+          document.getElementById('location-input').value = '';
+        });
+
+        // Map click event listener
+        map.addListener("click", function (event) {
+          handleMapClick(event.latLng, map, borderPoints);
+        });
+      }
+
+      function geocodeAddress(geocoder, map, address, borderPoints) {
+        geocoder.geocode({'address': address}, function(results, status) {
+          if (status === 'OK') {
+            var location = results[0].geometry.location;
+            handlePlaceSelection(location, map, borderPoints);
+          } else {
+            alert('Geocode was not successful for the following reason: ' + status);
+          }
+        });
+      }
+      
+      function handlePlaceSelection(location, map, borderPoints) {
+        map.setCenter(location);
+        map.setZoom(12);
+
+        // Clear any previous markers
+        map.markers = map.markers || [];
+        map.markers.forEach(marker => marker.setMap(null));
+
+        // Create a marker at the location
+        var marker = new google.maps.Marker({
+          map: map,
+          position: location
+        });
+        map.markers.push(marker);
+
+        var lat = location.lat();
+        var lng = location.lng();
+
+        // Calculate distance from the location to the nearest borderline point
+        var minDistance = calculateMinDistance(lat, lng, borderPoints);
+
+        // Define the elevation service
+        var elevator = new google.maps.ElevationService();
+
+        // Request elevation data
+        elevator.getElevationForLocations(
+          {
+            locations: [{ lat: lat, lng: lng }]
+          },
+            function(results, status) {
+              if (status === google.maps.ElevationStatus.OK && results[0]) {
+                var elevation = results[0].elevation;
+
+        // Convert elevation to meters and round it
+        var elevationText = elevation.toFixed(2) + " MASL";
+        
+        // Determine frequency registration, notification, and acceptance alert
+
+        // Use arrays to store all the conditions that are met
+        var RegistrationAlerts = [];
+        var NotificationAlerts = [];
+        var AcceptanceAlerts = [];
+
+        // Add all matching conditions to the arrays
+        if (minDistance <= 60) {
+          RegistrationAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("VHF 47-68 MHz (Band I)")'>VHF 47-68 MHz (Band I)</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("VHF 137-174 MHz")'>VHF 137-174 MHz</a>`);
+        }
+
+        if (minDistance <= 30) {
+          RegistrationAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 380-470 MHz")'>UHF 380-470 MHz</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 470-518 MHz (Band IV)")'>UHF 470-518 MHz (Band IV)</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 806-814/851-859 MHz")'>UHF 806-814/851-859 MHz</a>`);
+        }
+
+        if (minDistance <= 9) {
+          NotificationAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 703-743/758-798 MHz*")'>UHF 703-743/758-798 MHz*<a/>, <a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 824-835/869-880 MHz")'>UHF 824-835/869-880 MHz</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 890-895/935-940 MHz")'>UHF 890-895/935-940 MHz</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 895-905/940-950 MHz")'>UHF 895-905/940-950 MHz</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 905-915/950-960 MHz")'>UHF 905-915/950-960 MHz</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 1710-1785/1805-1880 MHz")'>UHF 1710-1785/1805-1880 MHz</a>`);
+        }
+
+        if (minDistance <= 9) {
+          AcceptanceAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 743-748/798-803 MHz*")'>UHF 743-748/798-803 MHz*</a>`);
+        }
+
+        if (minDistance <= 6) {
+          RegistrationAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 814-824/859-869 MHz")'>UHF 814-824/859-869 MHz</a>`);
+        }
+
+        if (minDistance <= 6) {
+          NotificationAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 1920-1980/2110-2170 MHz")'>UHF 1920-1980/2110-2170 MHz</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 2310-2370 MHz")'>UHF 2310-2370 MHz</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 2500-2570/2620-2670 MHz")'>UHF 2500-2570/2620-2670 MHz</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 2570-2620 MHz")'>UHF 2570-2620 MHz</a>`);
+        }
+
+        if (minDistance <= 6) {
+          AcceptanceAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 2300-2310 MHz")'>UHF 2300-2310 MHz</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 2370-2400 MHz (Mobile)")'>UHF 2370-2400 MHz (Mobile)</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 2500-2570/2620-2670 MHz")'>UHF 2500-2570/2620-2670 MHz</a>`);
+        }
+
+        if (minDistance <= 35) {
+          AcceptanceAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 2300-2310 MHz")'>UHF 2300-2310 MHz</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("UHF 2370-2400 MHz (Based)")'>UHF 2370-2400 MHz (Based)</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("SHF 4.400-5.000/5.925-6.425 GHz")'>SHF 4.400-5.000/5.925-6.425 GHz</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("SHF 8.275-8.500 GHz")'>SHF 8.275-8.500 GHz</a>`);
+        }
+
+        if (minDistance <= 35) {
+          RegistrationAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("SHF 6.430-8.275 GHz")'>SHF 6.430-8.275 GHz</a>`);
+        }
+
+        if (minDistance <= 15) {
+          AcceptanceAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("SHF 10.000-10.700/12.750-13.250 GHz")'>SHF 10.000-10.700/12.750-13.250 GHz</a>`);
+        }
+
+        if (minDistance <= 15) {
+          RegistrationAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("SHF 14.400-15.350 GHz")'>SHF 14.400-15.350 GHz</a>`);
+        }
+
+        if (minDistance <= 5) {
+          RegistrationAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("SHF 17.700-19.700/21.200-23.600 GHz")'>SHF 17.700-19.700/21.200-23.600 GHz</a>`);
+        }
+
+        if (minDistance <= 3) {
+          AcceptanceAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("SHF 24.300-29.500 GHz")'>SHF 24.300-29.500 GHz</a>`);
+        }
+
+        if (minDistance <= 5) {
+          AcceptanceAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("SHF 27.000-29.500 GHz")'>SHF 27.000-29.500 GHz</a>, <a href='javascript:void(0)' onclick='showFrequencyDetails("SHF 31.000-31.500 GHz")'>SHF 31.000-31.500 GHz</a>`);
+        }
+
+        if (minDistance <= 5) {
+          NotificationAlerts.push(`<a href='javascript:void(0)' onclick='showFrequencyDetails("EHF 71-76/81-86 GHz")'>EHF 71-76/81-86 GHz</a>`);
+        }
+
+        // If no alerts were added, set the alert to 'No'
+        if (RegistrationAlerts.length === 0) {
+          RegistrationAlerts.push("No");
+        }
+        if (NotificationAlerts.length === 0) {
+          NotificationAlerts.push("No");
+        }
+        if (AcceptanceAlerts.length === 0) {
+          AcceptanceAlerts.push("No");
+        }
+
+        // Join the alerts into a single string with line breaks for display
+        var RegistrationAlertString = RegistrationAlerts.join("<br>");
+        var NotificationAlertString = NotificationAlerts.join("<br>");
+        var AcceptanceAlertString = AcceptanceAlerts.join("<br>");
+
+        // Create an InfoWindow to display information
+        var infoWindow = new google.maps.InfoWindow({
+          content: `
+            <div style="font-size: 14px; padding: 15px; max-width: 500px; background-color: #fefefe; border-radius: 10px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);">
+              <p><strong>Coordinates:</strong> Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}</p>
+              <p><strong>Nearest Distance to Border:</strong> ${minDistance.toFixed(2)} KM</p>
+              <p><strong>Elevation:</strong> ${elevationText}</p>
+              <p><strong>Frequency Registration:</strong><br> ${RegistrationAlertString}</p>
+              <p><strong>Frequency Notification:</strong><br> ${NotificationAlertString}</p>
+              <p><strong>Temporary Acceptance:</strong><br> ${AcceptanceAlertString}</p> 
+            </div>`
+        });
+        infoWindow.open(map, marker);
+
+        // Store the infoWindow to close it later if needed
+        map.infoWindow = infoWindow;
+      } else {
+        console.error("Elevation service failed due to: " + status);
+      }
+    }
+  );
+}
+      
+      // JavaScript function to show details about frequency bands in a custom modal
+      function showFrequencyDetails(band) {
+        // Define details for different frequency bands for both countries
+        var bandDetails = {
+          "SHF 17.700-19.700/21.200-23.600 GHz": {
+            thailand: "Fixed Station, Mobile Station",
+            malaysia: "Fixed Station, Mobile Station",
+            distance: "0-5 KM"
+          },
+          "UHF 814-824/859-869 MHz": {
+            thailand: "Broadband Public Protection and Disaster Relief (BB PPDR)",
+            malaysia: "Broadband Public Protection and Disaster Relief (BB PPDR)/Mobile Station",
+            distance: "0-6 KM"
+          },
+          "SHF 14.400-15.350 GHz": {
+            thailand: "Fixed Station",
+            malaysia: "Fixed Station/Satellite Radio System",
+            distance: "0-15 KM"
+          },
+          "UHF 806-814/851-859 MHz": {
+            thailand: "Truck Radio System",
+            malaysia: "Broadband Public Protection and Disaster Relief (BB PPDR)",
+            distance: "0-30 KM"
+          },
+          "UHF 380-470 MHz": {
+            thailand: "Fixed Station, Land Mobile Station",
+            malaysia: "Fixed Station, Land Mobile Station",
+            distance: "0-30 KM"
+          },
+          "UHF 470-518 MHz (Band IV)": {
+            thailand: "Fixed Station, Land Mobile Station",
+            malaysia: "Fixed Station, Land Mobile Station",
+            distance: "0-30 KM"
+          },
+          "SHF 6.430-8.275 GHz": {
+            thailand: "Fixed Station/Satellite Radio System",
+            malaysia: "Fixed Station/Satellite Radio System",
+            distance: "0-35 KM"
+          },
+          "VHF 47-68 MHz (Band I)": {
+            thailand: "Fixed Station, Mobile Station",
+            malaysia: "Fixed Station, Mobile Station",
+            distance: "0-60 KM"  
+          },
+          "VHF 137-174 MHz": {
+            thailand: "Fixed Station, Land Mobile Station, Mobile Station, Ship Station",
+            malaysia: "Fixed Station, Land Mobile Station, Mobile Station, Ship Station",
+            distance: "0-60 KM"
+          },
+          "EHF 71-76/81-86 GHz": {
+            thailand: "Fixed Station",
+            malaysia: "Fixed Station",
+            distance: "0-5 KM"
+          },
+          "UHF 1920-1980/2110-2170 MHz": {
+            thailand: "Mobile Station",
+            malaysia: "Mobile Station",
+            distance: "0-8 KM"
+          },
+          "UHF 2310-2370 MHz": {
+            thailand: "Mobile Station",
+            malaysia: "Mobile Station",
+            distance: "0-6 KM"
+          },
+          "UHF 2500-2570/2620-2670 MHz": {
+            thailand: "Mobile Station (TDD)",
+            malaysia: "Mobile Station (FDD)",
+            distance: "0-6 KM"
+          },
+          "UHF 2570-2620 MHz": {
+            thailand: "Mobile Station (TDD)",
+            malaysia: "Mobile Station (TDD)",
+            distance: "0-6 KM"
+          },
+          "UHF 703-743/758-798 MHz*": {
+            thailand: "Mobile Station (IMT LTE/NR)",
+            malaysia: "Mobile Station (IMT LTE/NR)",
+            distance: "0-9 KM"
+          },
+          "UHF 824-835/869-880 MHz": {
+            thailand: "Mobile Station (HSPA/IMT)",
+            malaysia: "Mobile Station (IMT)",
+            distance: "0-9 KM"
+          },
+          "UHF 890-895/935-940 MHz": {
+            thailand: "Mobile Station (IMT)",
+            malaysia: "Mobile Station (GSM)",
+            distance: "0-9 KM"
+          },
+          "UHF 895-905/940-950 MHz": {
+            thailand: "Mobile Station (GSM/WCDMA)",
+            malaysia: "Mobile Station (GSM/WCDMA)",
+            distance: "0-9 KM"
+          },
+          "UHF 905-915/950-960 MHz": {
+            thailand: "Mobile Station (GSM/LTE)",
+            malaysia: "Mobile Station (GSM/WCDMA)",
+            distance: "0-9 KM"
+          },
+          "UHF 1710-1785/1805-1880 MHz": {
+            thailand: "Mobile Station (GSM/LTE)",
+            malaysia: "Mobile Station (GSM/LTE)",
+            distance: "0-9 KM"
+          },
+          "SHF 24.300-29.500 GHz": {
+            thailand: "Fixed Station/Satellite Radio System",
+            malaysia: "Satellite Radio System",
+            distance: "0-3 KM"
+          },
+          "SHF 27.000-29.500 GHz": {
+            thailand: "Fixed Station/Satellite Radio System",
+            malaysia: "Satellite Radio System",
+            distance: "0-5 KM"
+          },
+          "SHF 31.000-31.500 GHz": {
+            thailand: "Fixed Station/Satellite Radio System",
+            malaysia: "Fixed Station",
+            distance: "0-5 KM"
+          },
+          "UHF 2300-2310 MHz": {
+            thailand: "Fixed Station, Mobile Station (TDD/LTE)",
+            malaysia: "Mobile Station (TDD/LTE)",
+            distance: "0-35 KM"
+          },
+          "UHF 2370-2400 MHz (Mobile)": {
+            thailand: "Fixed Station, Mobile Station (TDD/LTE)",
+            malaysia: "Mobile Station (TDD/LTE)",
+            distance: "0-6 KM"
+          },
+          "UHF 2500-2570/2620-2670 MHz": {
+            thailand: "Mobile Station (TDD)",
+            malaysia: "Mobile Station (FDD)",
+            distance: "0-6 KM"
+          },
+          "UHF 743-748/798-803 MHz*": {
+            thailand: "Mobile Station (IMT)",
+            malaysia: "Mobile Station (IMT)",
+            distance: "0-9 KM"
+          },
+          "SHF 10.000-10.700/12.750-13.250 GHz": {
+            thailand: "Fixed Station",
+            malaysia: "Fixed Station/Satellite Radio System",
+            distance: "0-15 KM"
+          },
+          "UHF 2300-2310 MHz": {
+            thailand: "Fixed Station, Mobile Station (TDD-LTE)",
+            malaysia: "Mobile Station (TDD-LTE)",
+            distance: "0-6 KM"
+          },
+          "UHF 2370-2400 MHz (Based)": {
+            thailand: "Fixed Station, Mobile Station (TDD-LTE)",
+            malaysia: "Mobile Station (TDD-LTE)",
+            distance: "0-35 KM"
+          },
+          "SHF 4.400-5.000/5.925-6.425 GHz": {
+            thailand: "Fixed Station/Satellite Radio System",
+            malaysia: "Fixed Station/Satellite Radio System",
+            distance: "0-35 KM"
+          },
+          "SHF 8.275-8.500 GHz": {
+            thailand: "Fixed Station/Satellite Radio System",
+            malaysia: "Fixed Station/Satellite Radio System",
+            distance: "0-35 KM"
+          }
+        };
+         
+        // Get the modal elements
+        var modal = document.getElementById("frequencyModal");
+        var modalTitle = document.getElementById("modalTitle");
+        var thailandDetails = document.getElementById("thailandDetails");
+        var malaysiaDetails = document.getElementById("malaysiaDetails");
+        var distanceFromBorder = document.getElementById("distanceFromBorder");
+        var closeButton = document.getElementsByClassName("close")[0];
+
+        // Set the modal title and details based on the selected frequency band
+        modalTitle.innerText = `Detail Frequency of ${band}`;
+        if (bandDetails[band]) {
+          thailandDetails.innerText = bandDetails[band].thailand;
+          malaysiaDetails.innerText = bandDetails[band].malaysia;
+          distanceFromBorder.innerText = bandDetails[band].distance;
+        } else {
+          thailandDetails.innerText = "No information available";
+          malaysiaDetails.innerText = "No information available";
+          distanceFromBorder.innerText = "Not specified";
+        }
+
+        // Display the modal
+        modal.style.display = "block";
+
+        // When the user clicks on (x), close the modal
+        closeButton.onclick = function() {
+          modal.style.display = "none";
+        };
+
+        // When the user clicks anywhere outside of the modal, close it
+        window.onclick = function(event) {
+          if (event.target == modal) {
+            modal.style.display = "none";
+          }
+        };
+      }
+      
+
+      function createLocationButton(controlDiv, map, borderPoints) {
+        // Set CSS for the control border.
+        var controlUI = document.createElement('div');
+        controlUI.className = 'custom-map-control-button';
+        controlDiv.appendChild(controlUI);
+
+        // Set CSS for the control interior.
+        var controlText = document.createElement('div');
+        controlText.innerHTML = '📍';
+        controlUI.appendChild(controlText);
+
+        // Setup the click event listeners: geolocate user.
+        controlUI.addEventListener('click', function() {
+          // Try HTML5 geolocation.
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function(position) {
+              var pos = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+              };
+
+              handlePlaceSelection(pos, map, borderPoints);
+            }, function() {
+              handleLocationError(true, map.getCenter());
+            });
+          } else {
+            // Browser doesn't support Geolocation
+            handleLocationError(false, map.getCenter());
+          }
+        });
+      }
+
+      function handleLocationError(browserHasGeolocation, pos) {
+        alert(browserHasGeolocation
+          ? 'Error: The Geolocation service failed.'
+          : 'Error: Your browser doesn\'t support geolocation.');
+      }
+
+      function calculateMinDistance(lat, lng, borderPoints) {
+        var R = 6371; // Radius of the Earth in km
+        var minDistance = Infinity;
+
+        borderPoints.forEach(function (borderPoint) {
+          var dLat = degreesToRadians(borderPoint.lat - lat);
+          var dLng = degreesToRadians(borderPoint.lng - lng);
+          var a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(degreesToRadians(lat)) *
+              Math.cos(degreesToRadians(borderPoint.lat)) *
+              Math.sin(dLng / 2) *
+              Math.sin(dLng / 2);
+          var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          var distance = R * c; // Distance in km
+
+          if (distance < minDistance) {
+            minDistance = distance;
+          }
+        });
+
+        return minDistance;
+      }
+
+      function degreesToRadians(degrees) {
+        return (degrees * Math.PI) / 180;
+      }
+
+      function handleMapClick(latLng, map, borderPoints) {
+        handlePlaceSelection(latLng, map, borderPoints);
+      }
+    </script>
+  </head>
+  <body onload="initMap()">
+    <div id="map"></div>
+    <div class="search-container">
+      <input type="text" id="location-input" placeholder="Enter a location" />
+      <button id="clear-btn">&#x2715;</button>
+    </div>
+    <button class="go-btn">Go</button>
+  
+    <!-- Modal container for showing frequency band details -->
+    <div id="frequencyModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2 id="modalTitle">Detail Frequency of (Frequency Band)</h2>
+        <div id="modalDetails">
+          <p><strong>Radio Stations and Systems:</strong></p>
+          <div class="country-details">
+            <p><strong>- Thailand:</strong> <span id="thailandDetails"></span></p>
+            <p><strong>- Malaysia:</strong> <span id="malaysiaDetails"></span></p>
+          </div>
+          <p><strong>Distance from Border:</strong> <span id="distanceFromBorder"></span></p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
