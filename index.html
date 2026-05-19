@@ -769,7 +769,7 @@
       const panel = document.getElementById("results-panel");
       panel.innerHTML = `
         <h2 style="margin:0;font-size:20px;line-height:1.2;">Selected Location</h2>
-        <p style="margin:6px 0 0;color:var(--muted);font-size:13px;">Review the applicable coordination conditions below.</p>
+        <p style="margin:6px 0 0;color:var(--muted);font-size:13px;">Distance is calculated to the nearest Thailand–Malaysia border line segment.</p>
         <div class="metric-grid">
           <div class="metric-card"><span class="metric-label">Distance</span><span class="metric-value">${minDistance.toFixed(2)} KM</span></div>
           <div class="metric-card"><span class="metric-label">Latitude</span><span class="metric-value">${lat.toFixed(5)}</span></div>
@@ -826,17 +826,47 @@
       });
     }
 
+    // More accurate than nearest-point distance: measures to each segment of the border polyline.
+    // This prevents over-estimation when the selected point falls between two border vertices.
     function calculateMinDistance(lat, lng, points) {
-      const R = 6371;
+      if (!points || points.length === 0) return Infinity;
+      if (points.length === 1) return haversineDistanceKm({ lat, lng }, points[0]);
+
       let minDistance = Infinity;
-      points.forEach(point => {
-        const dLat = degreesToRadians(point.lat - lat);
-        const dLng = degreesToRadians(point.lng - lng);
-        const a = Math.sin(dLat / 2) ** 2 + Math.cos(degreesToRadians(lat)) * Math.cos(degreesToRadians(point.lat)) * Math.sin(dLng / 2) ** 2;
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        minDistance = Math.min(minDistance, R * c);
-      });
+      for (let i = 0; i < points.length - 1; i++) {
+        const distance = distanceToSegmentKm({ lat, lng }, points[i], points[i + 1]);
+        if (distance < minDistance) minDistance = distance;
+      }
       return minDistance;
+    }
+
+    function distanceToSegmentKm(point, start, end) {
+      const originLat = degreesToRadians(point.lat);
+      const kmPerDegreeLat = 110.574;
+      const kmPerDegreeLng = 111.320 * Math.cos(originLat);
+
+      const p = { x: point.lng * kmPerDegreeLng, y: point.lat * kmPerDegreeLat };
+      const a = { x: start.lng * kmPerDegreeLng, y: start.lat * kmPerDegreeLat };
+      const b = { x: end.lng * kmPerDegreeLng, y: end.lat * kmPerDegreeLat };
+
+      const abx = b.x - a.x;
+      const aby = b.y - a.y;
+      const ab2 = abx * abx + aby * aby;
+      if (ab2 === 0) return haversineDistanceKm(point, start);
+
+      const t = Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.y - a.y) * aby) / ab2));
+      const closest = { x: a.x + t * abx, y: a.y + t * aby };
+      const dx = p.x - closest.x;
+      const dy = p.y - closest.y;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function haversineDistanceKm(a, b) {
+      const R = 6371;
+      const dLat = degreesToRadians(b.lat - a.lat);
+      const dLng = degreesToRadians(b.lng - a.lng);
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(degreesToRadians(a.lat)) * Math.cos(degreesToRadians(b.lat)) * Math.sin(dLng / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
     }
 
     function degreesToRadians(degrees) { return degrees * Math.PI / 180; }
