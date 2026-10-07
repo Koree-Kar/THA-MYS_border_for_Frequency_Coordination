@@ -464,6 +464,7 @@
     let map;
     let activeMarker;
     let activeInfoWindow;
+    let locationRequestId = 0;
     let borderPolylines = [];
     let bufferLayers = [];
     let nearestBorderConnector;
@@ -799,6 +800,7 @@
     }
 
     async function handleLocation(location) {
+      const requestId = ++locationRequestId;
       const lat = typeof location.lat === "function" ? location.lat() : location.lat;
       const lng = typeof location.lng === "function" ? location.lng() : location.lng;
       const analysis = getBorderDistanceAnalysis(lat, lng, borderSegments);
@@ -811,6 +813,8 @@
       updateBufferOverlayHighlight(minDistance);
 
       const elevationText = await getElevationText(lat, lng);
+      // A newer selection may have completed while this elevation request was pending.
+      if (requestId !== locationRequestId) return;
       const alerts = buildAlerts(minDistance);
       renderResults({ lat, lng, minDistance, elevationText, alerts, nearestPoint: analysis.nearestPoint });
       openSummaryInfoWindow({ lat, lng, minDistance, elevationText });
@@ -902,6 +906,7 @@
       borderSegments.forEach(path => {
         const line = new google.maps.Polyline({
           path,
+          clickable: false,
           geodesic: true,
           strokeColor: "#0f172a",
           strokeOpacity: 0.95,
@@ -930,6 +935,8 @@
           const layer = new google.maps.Data({ map });
           layer.addGeoJson(buffered);
           layer.setStyle({
+            // Visual overlays must let clicks reach the map's location handler.
+            clickable: false,
             fillColor: zone.color,
             fillOpacity: zone.fillOpacity,
             strokeColor: zone.color,
@@ -964,6 +971,8 @@
         const zone = layer.__zone;
         const isActive = distanceKm <= zone.km;
         layer.setStyle({
+          // setStyle replaces the initial style, so preserve click-through here too.
+          clickable: false,
           fillColor: zone.color,
           fillOpacity: isActive ? Math.min(zone.fillOpacity + 0.12, 0.28) : zone.fillOpacity,
           strokeColor: zone.color,
@@ -997,6 +1006,7 @@
 
       nearestBorderConnector = new google.maps.Polyline({
         path: [point, nearestPoint],
+        clickable: false,
         geodesic: true,
         strokeColor: "#dc2626",
         strokeOpacity: 0.9,
