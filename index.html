@@ -180,7 +180,7 @@
 
     .metric-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
       margin: 14px 0 16px;
     }
@@ -203,6 +203,17 @@
       font-size: 15px;
       font-weight: 800;
     }
+
+    .location-actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+    .action-button { padding:9px 12px; border:1px solid #cbd5e1; border-radius:12px; background:#fff; color:#1d4ed8; font:inherit; font-size:12px; font-weight:700; cursor:pointer; text-decoration:none; }
+    .action-button:disabled { opacity:.5; cursor:wait; }
+    .action-button:focus-visible, .legend-item input:focus-visible { outline:2px solid var(--primary); outline-offset:3px; }
+    .loading-status { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
+    .loading-spinner { width:14px; height:14px; border:2px solid #cbd5e1; border-top-color:var(--primary); border-radius:50%; animation:loading-spin 1s linear infinite; }
+    @keyframes loading-spin { to { transform:rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .loading-spinner { animation:none; } }
+    .legend-item input { accent-color:var(--primary); width:16px; height:16px; margin:0; }
+    .legend-item label { display:flex; align-items:center; gap:8px; cursor:pointer; }
 
     .section-card {
       margin-top: 12px;
@@ -468,6 +479,9 @@
     let activeMarker;
     let activeInfoWindow;
     let locationRequestId = 0;
+    let currentSelection = null;
+    let selectedReport = null;
+    const bufferVisibility = new Map();
     let borderPolylines = [];
     let bufferLayers = [];
     let nearestBorderConnector;
@@ -568,11 +582,22 @@
     }
 
     async function handleLocation(location) {
-      const requestId = ++locationRequestId;
       const lat = typeof location.lat === "function" ? location.lat() : location.lat;
       const lng = typeof location.lng === "function" ? location.lng() : location.lng;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+        showToast("Please select valid latitude and longitude coordinates.");
+        return;
+      }
+      const requestId = ++locationRequestId;
+      currentSelection = { lat, lng };
+      selectedReport = null;
+      if (activeInfoWindow) activeInfoWindow.close();
       const analysis = getBorderDistanceAnalysis(lat, lng, borderSegments);
       const minDistance = analysis.distanceKm;
+      const alerts = Number.isFinite(minDistance) ? buildAlerts(minDistance) : { registration: [], notification: [], acceptance: [] };
+      const result = { lat, lng, minDistance, alerts, nearestPoint: analysis.nearestPoint,
+        checkedAt: new Date().toISOString(), geometrySource: borderGeometrySource, distanceMethod: analysis.method, embeddedBoundary: useEmbeddedBuffers,
+        applicableRules: frequencyRules.filter(rule => minDistance <= rule.maxKm) };
 
       map.setCenter({ lat, lng });
       map.setZoom(Math.max(map.getZoom(), 12));
@@ -580,11 +605,14 @@
       drawNearestBorderConnector({ lat, lng }, analysis.nearestPoint);
       updateBufferOverlayHighlight(minDistance);
 
+      renderResults({ ...result, elevationText: "Loading…", isLoading: true });
+      document.querySelector(".side-panel").scrollTop = 0;
+
       const elevationText = await getElevationText(lat, lng);
       // A newer selection may have completed while this elevation request was pending.
       if (requestId !== locationRequestId) return;
-      const alerts = buildAlerts(minDistance);
-      renderResults({ lat, lng, minDistance, elevationText, alerts, nearestPoint: analysis.nearestPoint });
+      selectedReport = Number.isFinite(minDistance) ? { ...result, elevationText } : null;
+      renderResults({ ...result, elevationText });
       openSummaryInfoWindow({ lat, lng, minDistance, elevationText });
     }
 
@@ -715,6 +743,7 @@
             zIndex: 10 + index
           });
           layer.__zone = zone;
+          layer.setMap(bufferVisibility.get(zone.km) === false ? null : map);
           bufferLayers.push(layer);
         } catch (error) {
           console.warn(`Could not draw ${zone.label} buffer`, error);
@@ -762,12 +791,23 @@
     function renderBufferLegend() {
       const container = document.getElementById("buffer-legend-items");
       if (!container) return;
-      container.innerHTML = BUFFER_ZONES.map(zone => `
+      container.innerHTML = `<div class="location-actions"><button type="button" class="action-button" onclick="setAllBuffersVisible(true)">Show all</button><button type="button" class="action-button" onclick="setAllBuffersVisible(false)">Hide all</button></div>` + BUFFER_ZONES.map(zone => `
         <div class="legend-item" data-km="${zone.km}">
-          <span class="legend-left"><span class="legend-swatch" style="background:${zone.color}"></span>${zone.label}</span>
+          <label><input type="checkbox" data-buffer-km="${zone.km}" aria-label="Show ${zone.label} buffer" ${bufferVisibility.get(zone.km) === false ? "" : "checked"} onchange="setBufferVisible(${zone.km}, this.checked)"><span class="legend-swatch" style="background:${zone.color}"></span>${zone.label}</label>
           <span>≤ ${zone.km} km</span>
         </div>
       `).join("");
+    }
+
+    function setBufferVisible(km, visible) {
+      bufferVisibility.set(km, visible);
+      bufferLayers.filter(layer => layer.__zone.km === km).forEach(layer => layer.setMap(visible ? map : null));
+      const checkbox = document.querySelector(`[data-buffer-km="${km}"]`);
+      if (checkbox) checkbox.checked = visible;
+    }
+
+    function setAllBuffersVisible(visible) {
+      BUFFER_ZONES.forEach(zone => setBufferVisible(zone.km, visible));
     }
 
     function drawNearestBorderConnector(point, nearestPoint) {
@@ -793,11 +833,17 @@
 
     function getElevationText(lat, lng) {
       return new Promise(resolve => {
+        let complete = false;
+        let timer;
+        const finish = text => { if (complete) return; complete = true; clearTimeout(timer); resolve(text); };
+        timer = setTimeout(() => finish("Not available (request timed out)"), 10000);
+        try {
         const elevator = new google.maps.ElevationService();
         elevator.getElevationForLocations({ locations: [{ lat, lng }] }, (results, status) => {
-          if (status === google.maps.ElevationStatus.OK && results[0]) resolve(`${results[0].elevation.toFixed(2)} MASL`);
-          else resolve("Not available");
+          if (status === google.maps.ElevationStatus.OK && results && results[0] && Number.isFinite(results[0].elevation)) finish(`${results[0].elevation.toFixed(2)} MASL`);
+          else finish("Not available");
         });
+        } catch (error) { finish("Not available"); }
       });
     }
 
@@ -929,16 +975,25 @@
       return alerts;
     }
 
-    function renderResults({ lat, lng, minDistance, elevationText, alerts, nearestPoint }) {
+    function renderResults({ lat, lng, minDistance, elevationText, alerts, nearestPoint, isLoading = false }) {
       const panel = document.getElementById("results-panel");
+      panel.setAttribute("aria-busy", String(isLoading));
       const nearestText = nearestPoint ? `${nearestPoint.lat.toFixed(5)}, ${nearestPoint.lng.toFixed(5)}` : "Not available";
       panel.innerHTML = `
         <h2 style="margin:0;font-size:20px;line-height:1.2;">Selected Location</h2>
         <p style="margin:6px 0 0;color:var(--muted);font-size:13px;">Distance uses Turf.js geodesic point-to-line measurement against the border GeoJSON/polyline.</p>
         <div class="metric-grid">
-          <div class="metric-card"><span class="metric-label">Distance</span><span class="metric-value">${minDistance.toFixed(2)} KM</span></div>
+          <div class="metric-card"><span class="metric-label">Distance</span><span class="metric-value">${Number.isFinite(minDistance) ? minDistance.toFixed(2) + " KM" : "Not available"}</span></div>
           <div class="metric-card"><span class="metric-label">Latitude</span><span class="metric-value">${lat.toFixed(5)}</span></div>
+          <div class="metric-card"><span class="metric-label">Longitude</span><span class="metric-value">${lng.toFixed(5)}</span></div>
           <div class="metric-card"><span class="metric-label">Elevation</span><span class="metric-value">${elevationText}</span></div>
+        </div>
+        ${isLoading ? '<p class="loading-status" role="status"><span class="loading-spinner" aria-hidden="true"></span>Fetching elevation for this location…</p>' : ''}
+        <div class="location-actions">
+          <button type="button" class="action-button" onclick="copySelectedCoordinates()">Copy coordinates</button>
+          <a class="action-button" href="${googleMapsLocationUrl(lat, lng)}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>
+          <button type="button" class="action-button" onclick="exportLocationReport('html')" ${isLoading || !Number.isFinite(minDistance) ? 'disabled' : ''}>Download report</button>
+          <button type="button" class="action-button" onclick="exportLocationReport('csv')" ${isLoading || !Number.isFinite(minDistance) ? 'disabled' : ''}>Export CSV</button>
         </div>
         <div class="section-card">
           <h3 class="section-title"><span class="status-dot" style="background:#dc2626"></span>Nearest border point</h3>
@@ -948,6 +1003,84 @@
         ${renderAlertSection("Frequency Notification", "notification", alerts.notification)}
         ${renderAlertSection("Temporary Acceptance", "acceptance", alerts.acceptance)}
       `;
+    }
+
+    function googleMapsLocationUrl(lat, lng) {
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lng}`)}`;
+    }
+
+    async function copySelectedCoordinates() {
+      if (!currentSelection) return;
+      const coordinates = `${currentSelection.lat.toFixed(6)}, ${currentSelection.lng.toFixed(6)}`;
+      try {
+        if (!navigator.clipboard || !window.isSecureContext) throw new Error("Clipboard unavailable");
+        await navigator.clipboard.writeText(coordinates);
+        showToast("Coordinates copied.");
+      } catch (error) {
+        // Local HTML files and browsers without clipboard permission still support manual copy.
+        window.prompt("Copy these latitude, longitude coordinates:", coordinates);
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
+    }
+
+    function reportRows(report) {
+      const rows = [
+        ["Location", "Latitude", report.lat.toFixed(6)],
+        ["Location", "Longitude", report.lng.toFixed(6)],
+        ["Location", "Google Maps", googleMapsLocationUrl(report.lat, report.lng)],
+        ["Measurement", "Border distance (km)", report.minDistance.toFixed(6)],
+        ["Measurement", "Elevation", report.elevationText],
+        ["Measurement", "Nearest border latitude", report.nearestPoint ? report.nearestPoint.lat.toFixed(6) : "Not available"],
+        ["Measurement", "Nearest border longitude", report.nearestPoint ? report.nearestPoint.lng.toFixed(6) : "Not available"],
+        ["Provenance", "Checked at (UTC)", report.checkedAt],
+        ["Provenance", "Checked at (Thailand)", new Date(report.checkedAt).toLocaleString("en-GB", { timeZone: "Asia/Bangkok" }) + " UTC+07:00"],
+        ["Provenance", "Boundary source", report.geometrySource],
+        ["Provenance", "Distance method", report.distanceMethod],
+        ["Provenance", "Frequency rules", "Existing application rules; NBTC reference verification pending"]
+      ];
+      if (report.embeddedBoundary) rows.push(["Provenance", "Embedded boundary reference", "https://mygems.jmg.gov.my/server/rest/services/Demarcation_MIL1/MapServer/3"]);
+      const labels = { registration: "Frequency Registration", notification: "Frequency Notification", acceptance: "Temporary Acceptance" };
+      for (const [type, label] of Object.entries(labels)) {
+        const rules = report.applicableRules.filter(rule => rule.type === type);
+        if (!rules.length) rows.push([label, "Conditions", "No condition triggered"]);
+        rules.forEach(rule => rule.bands.forEach(band => rows.push([label, band, `Within ${rule.maxKm} km`])));
+      }
+      rows.push(["Notes", "Boundary interpretation", "Distances and buffers use the selected land-border geometry, not Google Maps border graphics. Verify the boundary and frequency rules against approved bilateral/NBTC references before official use."]);
+      return rows;
+    }
+
+    function csvCell(value) {
+      let text = String(value);
+      // Prevent spreadsheet formula interpretation when a custom source label is exported.
+      if (/^[=+@\-\t\r]/.test(text)) text = "'" + text;
+      return '"' + text.replace(/"/g, '""') + '"';
+    }
+
+    function exportLocationReport(format) {
+      if (!selectedReport) return showToast("Wait for the selected location to finish loading.");
+      const report = selectedReport;
+      const rows = reportRows(report);
+      let content;
+      let mime;
+      if (format === "csv") {
+        content = "\uFEFF" + [["Category", "Item", "Value"], ...rows].map(row => row.map(csvCell).join(",")).join("\r\n");
+        mime = "text/csv;charset=utf-8";
+      } else {
+        format = "html";
+        content = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Border frequency coordination location report</title><style>body{font:15px/1.5 Arial,sans-serif;color:#0f172a;max-width:1000px;margin:32px auto;padding:0 20px}h1{font-size:24px}table{border-collapse:collapse;width:100%;table-layout:fixed}th,td{border:1px solid #cbd5e1;padding:10px;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#eff6ff}th:first-child{width:22%}th:nth-child(2){width:36%}button{padding:10px 16px;margin-bottom:20px;cursor:pointer}@media print{button{display:none}body{margin:0;padding:0;font-size:11px}thead{display:table-header-group}tr{break-inside:avoid}}</style></head><body><h1>Border frequency coordination location report</h1><p>Selected location: ${report.lat.toFixed(6)}, ${report.lng.toFixed(6)}<br>Exported: ${escapeHtml(new Date().toISOString())}</p><button type="button" onclick="window.print()">Print / Save as PDF</button><table><thead><tr><th>Category</th><th>Item</th><th>Value</th></tr></thead><tbody>${rows.map(row => '<tr>' + row.map(cell => '<td>' + escapeHtml(cell) + '</td>').join('') + '</tr>').join('')}</tbody></table></body></html>`;
+        mime = "text/html;charset=utf-8";
+      }
+      const url = URL.createObjectURL(new Blob([content], { type: mime }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `border-location_${report.lat.toFixed(5)}_${report.lng.toFixed(5)}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
     }
 
     function renderAlertSection(title, type, bands) {
