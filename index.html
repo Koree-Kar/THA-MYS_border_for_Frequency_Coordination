@@ -409,7 +409,28 @@
     .detail-row strong { display: block; margin-bottom: 4px; }
 
     .gm-style .gm-style-iw-c { border-radius: 20px !important; padding: 0 !important; }
-    .gm-style .gm-style-iw-d { overflow: hidden !important; }
+    .gm-style .gm-style-iw-d { overflow: auto !important; }
+
+    .location-popup { width:min(300px, calc(100vw - 64px)); padding:18px; font-family:Inter,Arial,sans-serif; color:#0f172a; }
+    .popup-heading { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+    .popup-icon { display:grid; place-items:center; width:36px; height:36px; flex:0 0 auto; border-radius:12px; background:#eff6ff; color:#2563eb; font-size:20px; font-weight:700; }
+    .popup-heading h2 { margin:0; font-size:15px; line-height:1.4; font-weight:750; }
+    .popup-heading p { margin:2px 0 0; font-size:11px; line-height:1.4; color:#64748b; }
+    .popup-close { display:grid; place-items:center; margin-left:auto; align-self:flex-start; width:32px; height:32px; flex:0 0 auto; border:0; border-radius:10px; background:#f8fafc; color:#64748b; cursor:pointer; font-size:22px; line-height:1; }
+    .popup-close:hover { background:#e2e8f0; color:#0f172a; }
+    .popup-metrics { display:grid; grid-template-columns:1.15fr 1fr; gap:10px; margin-bottom:16px; }
+    .popup-metric { padding:12px; border:1px solid #e2e8f0; border-radius:14px; background:#f8fafc; min-width:0; }
+    .popup-metric-primary { background:#eff6ff; border-color:#dbeafe; }
+    .popup-label { display:block; color:#64748b; font-size:10px; line-height:1.5; margin-bottom:6px; font-weight:600; }
+    .popup-distance { color:#1d4ed8; font-size:26px; font-weight:800; letter-spacing:-.8px; font-variant-numeric:tabular-nums; }
+    .popup-unit { font-size:11px; font-weight:600; letter-spacing:0; color:#64748b; }
+    .popup-elevation { display:block; font-size:17px; font-weight:750; line-height:1.8; font-variant-numeric:tabular-nums; }
+    .popup-unavailable { font-size:12px; font-weight:600; line-height:1.5; }
+    .popup-coordinates { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding-top:14px; border-top:1px solid #e2e8f0; }
+    .popup-coordinate { font-size:13px; font-weight:650; font-variant-numeric:tabular-nums; }
+    .popup-actions { display:flex; gap:8px; margin-top:16px; }
+    .popup-actions .action-button { flex:1; padding:9px 6px; text-align:center; font-size:11px; border-color:#dbeafe; }
+    .popup-close:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
 
     @media (max-width: 860px) {
       .top-panel { grid-template-columns: 1fr; }
@@ -1011,7 +1032,11 @@
 
     async function copySelectedCoordinates() {
       if (!currentSelection) return;
-      const coordinates = `${currentSelection.lat.toFixed(6)}, ${currentSelection.lng.toFixed(6)}`;
+      return copyLocationCoordinates(currentSelection.lat, currentSelection.lng);
+    }
+
+    async function copyLocationCoordinates(lat, lng) {
+      const coordinates = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
       try {
         if (!navigator.clipboard || !window.isSecureContext) throw new Error("Clipboard unavailable");
         await navigator.clipboard.writeText(coordinates);
@@ -1096,17 +1121,36 @@
 
     function openSummaryInfoWindow({ lat, lng, minDistance, elevationText }) {
       if (activeInfoWindow) activeInfoWindow.close();
+      const elevationMatch = /^(-?\d+(?:\.\d+)?) MASL$/.exec(elevationText);
       activeInfoWindow = new google.maps.InfoWindow({
-        content: `<div style="padding:14px 16px;max-width:280px;font-family:Inter,Arial,sans-serif;">
-          <strong style="font-size:15px;">Location checked</strong>
-          <div style="margin-top:8px;color:#475569;font-size:13px;line-height:1.55;">
-            Distance: <b>${minDistance.toFixed(2)} KM</b><br>
-            Elevation: <b>${elevationText}</b><br>
-            Lat/Lng: ${lat.toFixed(5)}, ${lng.toFixed(5)}
+        headerDisabled: true,
+        ariaLabel: "Checked location measurements",
+        maxWidth: 340,
+        content: `<div class="location-popup">
+          <div class="popup-heading">
+            <span class="popup-icon" aria-hidden="true">✓</span>
+            <div><h2>Location checked</h2><p>Border coordination overview</p></div>
+            <button type="button" class="popup-close" aria-label="Close location summary" onclick="closeLocationSummary()">×</button>
+          </div>
+          <div class="popup-metrics">
+            <div class="popup-metric popup-metric-primary"><span class="popup-label">Distance to border</span><span class="popup-distance">${Number.isFinite(minDistance) ? minDistance.toFixed(2) : '—'}</span> <span class="popup-unit">km</span></div>
+            <div class="popup-metric"><span class="popup-label">Elevation</span>${elevationMatch ? `<span class="popup-elevation">${elevationMatch[1]} <span class="popup-unit">m</span></span><span class="popup-unit">above sea level</span>` : `<span class="popup-unavailable">${escapeHtml(elevationText)}</span>`}</div>
+          </div>
+          <div class="popup-coordinates">
+            <div><span class="popup-label">Latitude</span><span class="popup-coordinate">${lat.toFixed(6)}</span></div>
+            <div><span class="popup-label">Longitude</span><span class="popup-coordinate">${lng.toFixed(6)}</span></div>
+          </div>
+          <div class="popup-actions">
+            <button type="button" class="action-button" onclick="copyLocationCoordinates(${lat}, ${lng})">Copy coordinates</button>
+            <a class="action-button" href="${googleMapsLocationUrl(lat, lng)}" target="_blank" rel="noopener noreferrer">Google Maps ↗</a>
           </div>
         </div>`
       });
       activeInfoWindow.open(map, activeMarker);
+    }
+
+    function closeLocationSummary() {
+      if (activeInfoWindow) activeInfoWindow.close();
     }
 
     function createLocationButton() {
