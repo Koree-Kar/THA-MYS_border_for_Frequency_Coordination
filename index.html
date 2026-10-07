@@ -264,21 +264,37 @@
       font-weight: 700;
     }
 
-    .custom-map-control-button {
-      display: grid;
-      place-items: center;
-      width: 52px;
-      height: 52px;
-      margin: 18px 12px 0 0;
-      border: 0;
-      border-radius: 18px;
-      cursor: pointer;
-      background: #fff;
-      box-shadow: 0 10px 28px rgba(15,23,42,.22);
-      font-size: 23px;
+    .map-control-group {
+      position:absolute; top:12px; right:12px; pointer-events:auto;
+      display:flex; flex-direction:column; gap:8px; padding:6px;
+      border:1px solid rgba(148,163,184,.25); border-radius:18px;
+      background:rgba(255,255,255,.96); box-shadow:0 8px 28px rgba(15,23,42,.16);
     }
 
-    .custom-map-control-button:hover { transform: translateY(-1px); }
+    .custom-map-control-button {
+      position:relative;
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      border: 0;
+      border-radius: 12px;
+      cursor: pointer;
+      background: #f8fafc;
+      color:#2563eb;
+      transition:background .15s ease, color .15s ease;
+    }
+
+    .custom-map-control-button:hover { background:#eff6ff; color:#1d4ed8; }
+    .custom-map-control-button:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
+    .custom-map-control-button:disabled { cursor:wait; opacity:.6; }
+    .custom-map-control-button svg { width:22px; height:22px; }
+    .custom-map-control-button::after { content:attr(data-label); position:absolute; right:calc(100% + 14px); white-space:nowrap; padding:7px 10px; border-radius:9px; background:#0f172a; color:#fff; font:500 12px Inter,Arial,sans-serif; opacity:0; visibility:hidden; pointer-events:none; }
+    .custom-map-control-button:hover::after, .custom-map-control-button:focus-visible::after { opacity:1; visibility:visible; }
+    @media (max-width:860px) {
+      .map-control-group { flex-direction:row; left:16px; right:auto; }
+      .custom-map-control-button::after { right:auto; left:0; top:calc(100% + 14px); }
+    }
 
     .toast {
       pointer-events: auto;
@@ -558,7 +574,7 @@
         center: { lat: 6.556, lng: 101.26 },
         mapTypeControl: false,
         streetViewControl: false,
-        fullscreenControl: true,
+        fullscreenControl: false,
         clickableIcons: false,
         styles: [
           { featureType: "poi", stylers: [{ visibility: "off" }] },
@@ -572,7 +588,7 @@
       drawBorderPath();
       renderBufferLegend();
       setupSearch();
-      createLocationButton();
+      createMapControls();
 
       map.addListener("click", event => handleLocation(event.latLng));
     }
@@ -1153,22 +1169,84 @@
       if (activeInfoWindow) activeInfoWindow.close();
     }
 
-    function createLocationButton() {
+    function createMapControls() {
       const controlDiv = document.createElement("div");
+      controlDiv.className = "map-control-group";
+      controlDiv.setAttribute("role", "group");
+      controlDiv.setAttribute("aria-label", "Map view controls");
+      const icon = paths => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+      const expandIcon = icon('<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>');
+      const collapseIcon = icon('<path d="M3 8h5V3M21 8h-5V3M8 21v-5H3M16 21v-5h5"/>');
+      const locationIcon = icon('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>');
+      const fullscreenButton = document.createElement("button");
+      fullscreenButton.type = "button";
+      fullscreenButton.className = "custom-map-control-button";
+      const syncFullscreenButton = () => {
+        const isFullscreen = Boolean(document.fullscreenElement);
+        const label = isFullscreen ? "Exit fullscreen" : "Enter fullscreen";
+        fullscreenButton.innerHTML = isFullscreen ? collapseIcon : expandIcon;
+        fullscreenButton.title = label;
+        fullscreenButton.dataset.label = label;
+        fullscreenButton.setAttribute("aria-label", label);
+        fullscreenButton.setAttribute("aria-pressed", String(isFullscreen));
+      };
+      syncFullscreenButton();
+      fullscreenButton.addEventListener("click", async () => {
+        try {
+          if (document.fullscreenElement) await document.exitFullscreen();
+          else if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+          else showToast("Fullscreen is unavailable in this browser.");
+          syncFullscreenButton();
+        } catch (error) { showToast("Fullscreen could not open. Try opening this page in its own browser tab."); }
+      });
+      document.addEventListener("fullscreenchange", syncFullscreenButton);
+      controlDiv.appendChild(fullscreenButton);
+
       const controlUI = document.createElement("button");
+      controlUI.type = "button";
       controlUI.className = "custom-map-control-button";
-      controlUI.innerHTML = "📍";
+      controlUI.innerHTML = locationIcon;
       controlUI.title = "Use my current location";
+      controlUI.dataset.label = "Use my current location";
+      controlUI.setAttribute("aria-label", "Use my current location");
       controlDiv.appendChild(controlUI);
-      map.controls[google.maps.ControlPosition.RIGHT_TOP].push(controlDiv);
+      document.querySelector(".app-shell").appendChild(controlDiv);
+      const positionControls = () => {
+        controlDiv.style.top = window.innerWidth <= 860 ? `${document.querySelector(".top-panel").getBoundingClientRect().bottom + 12}px` : "12px";
+      };
+      positionControls();
+      window.addEventListener("resize", positionControls);
+      if (window.ResizeObserver) new ResizeObserver(positionControls).observe(document.querySelector(".top-panel"));
+
+      const finishLocationLookup = () => {
+        controlUI.disabled = false;
+        controlUI.removeAttribute("aria-busy");
+        controlUI.innerHTML = locationIcon;
+        controlUI.title = "Use my current location";
+        controlUI.dataset.label = "Use my current location";
+        controlUI.setAttribute("aria-label", "Use my current location");
+      };
 
       controlUI.addEventListener("click", () => {
         if (!navigator.geolocation) return showToast("Your browser does not support geolocation.");
+        controlUI.disabled = true;
+        controlUI.setAttribute("aria-busy", "true");
+        controlUI.innerHTML = '<span class="loading-spinner" aria-hidden="true"></span>';
+        controlUI.title = "Finding your location…";
+        controlUI.dataset.label = "Finding your location…";
+        controlUI.setAttribute("aria-label", "Finding your location");
+        showToast("Finding your current location…");
+        try {
         navigator.geolocation.getCurrentPosition(
-          position => handleLocation({ lat: position.coords.latitude, lng: position.coords.longitude }),
-          () => showToast("Unable to access your location. Please allow location permission and try again."),
+          position => { finishLocationLookup(); handleLocation({ lat: position.coords.latitude, lng: position.coords.longitude }); },
+          error => {
+            finishLocationLookup();
+            const messages = { 1: "Location access was denied. Allow location access in your browser and try again.", 2: "Your location is unavailable. Try again or search for a place.", 3: "Location lookup timed out. Try again or search for a place." };
+            showToast(messages[error.code] || "Unable to access your location. Please try again.");
+          },
           { enableHighAccuracy: true, timeout: 10000 }
         );
+        } catch (error) { finishLocationLookup(); showToast("Unable to access your location in this browser."); }
       });
     }
 
